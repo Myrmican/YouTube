@@ -2,7 +2,10 @@ import { Client, Collection, Events } from "discord.js";
 import { readdir, stat } from "node:fs/promises";
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import db from "./util/Database";
+import { startPolling } from "./polling";
+//import db from "./util/Database";
+
+startPolling()
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename)
@@ -86,4 +89,4 @@ client.buttons = new Collection();
     client.login(process.env.BOT_TOKEN as string);   
 })();
 
-export { client, db };
+export { client };
