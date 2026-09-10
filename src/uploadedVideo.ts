@@ -1,9 +1,18 @@
-function handleUpload(uploadSnippet: any) {
-    const alertChannelID = '12345' //Query database
+import { client, db } from "./index";
 
-    console.log('🎉 New Video Uploaded!');
-    console.log(`Title: ${uploadSnippet.title}`);
-    console.log(`URL: https://www.youtube.com/watch?v=${uploadSnippet.resourceId?.videoId}`);
+async function handleUpload(uploadSnippet: any, guildId: any) {
+    const results = await db.execute({ sql: `SELECT * FROM config WHERE guildId = ?`, args: [guildId]})
+    const row: any = results.rows[0];
+
+    const channel = client.channels.cache.get(row.alertChannelID);
+    if (!channel?.isSendable()) return;
+
+    const filterKeywords = row.filterKeywords.split(",");
+    for (const keyword of filterKeywords) {
+        if (uploadSnippet.title.includes(keyword) && row.filterType == 1) return;
+    }
+
+    await channel.send(`New video from **${row.channelUsername}**!\nhttps://www.youtube.com/watch?v=${uploadSnippet.resourceId?.videoId}`);
 }
 
 export { handleUpload }

@@ -1,4 +1,5 @@
-import { ChatInputCommandInteraction, EmbedBuilder, MessageFlags, SlashCommandBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, LabelBuilder, ChannelSelectMenuBuilder } from "discord.js";
+import { ChatInputCommandInteraction, SlashCommandBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, LabelBuilder, ChannelSelectMenuBuilder, ChannelType } from "discord.js";
+import { db } from "../index";
 
 export default {
     data: new SlashCommandBuilder()
@@ -7,11 +8,15 @@ export default {
 
     async execute(interaction: ChatInputCommandInteraction) {
 
+        const guildId = interaction.guildId
+        const results = await db.execute({ sql: `SELECT * FROM config WHERE guildId = ?`, args: [guildId]})
+        const row: any = results.rows[0];
         const modal = new ModalBuilder().setCustomId("configDashboard").setTitle("YouTube bot config");
 
         const usernameOption = new TextInputBuilder()
             .setCustomId("usernameOption")
             .setStyle(TextInputStyle.Short)
+            .setValue(row.channelUsername)
             .setRequired(true)
 
         const usernameOptionLabel = new LabelBuilder()
@@ -22,8 +27,6 @@ export default {
         const filterOption = new TextInputBuilder()
             .setCustomId("filterOption")
             .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder("")
-            .setRequired(true)
 
         const filterOptionLabel = new LabelBuilder()
             .setLabel('Filter keywords')
@@ -32,6 +35,11 @@ export default {
 
         const alertChannelOption = new ChannelSelectMenuBuilder()
             .setCustomId("alertChannel")
+            .setChannelTypes(
+                ChannelType.GuildText,
+                ChannelType.GuildAnnouncement
+            )
+            .setDefaultChannels(row.alertChannelID);
 
         const alertChannelOptionLabel = new LabelBuilder()
             .setLabel('Alert channel')

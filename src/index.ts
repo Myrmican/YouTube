@@ -5,8 +5,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startPolling } from "./polling";
 import { db } from "./util/Database";
 
-startPolling()
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename)
 
@@ -82,6 +80,11 @@ client.buttons = new Collection();
     
     client.on(Events.ClientReady, async () => {
         await client.application?.commands.set(commands);
+
+        const guildIds = Array.from(client.guilds.cache.keys());
+        guildIds.forEach((guildId) => {
+            startPolling(guildId);
+        })
 
         console.log("Ready!")
     });

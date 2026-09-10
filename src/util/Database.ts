@@ -9,10 +9,11 @@ const db = createClient({
     await db.execute({
         sql: `
         CREATE TABLE IF NOT EXISTS config (
-        channelUsername TEXT NOT NULL,
-        filterType INT,
-        alertChannelID TEXT,
-        filterKeywords TEXT
+        guildId TEXT PRIMARY KEY,
+        channelUsername TEXT DEFAULT '',
+        filterType INT DEFAULT 1,
+        alertChannelID TEXT DEFAULT '0',
+        filterKeywords TEXT DEFAULT ''
         );`
 })
 })()
