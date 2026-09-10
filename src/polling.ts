@@ -1,11 +1,11 @@
 import { youtube, youtube_v3 } from '@googleapis/youtube';
+import { handleUpload } from './uploadedVideo';
 
 const youtubeClient = youtube({
   version: 'v3',
   auth: process.env.API_KEY,
 });
 
-// Helper: Convert Channel ID (UC...) to Uploads Playlist ID (UU...)
 function getUploadsPlaylistId(channelId: string): string {
   if (channelId.startsWith('UC')) {
     return 'UU' + channelId.substring(2);
@@ -23,62 +23,88 @@ export class YouTubeUploadPoller {
   private uploadsPlaylistId: string;
   private intervalMs: number;
   private onNewVideo: (video: youtube_v3.Schema$PlaylistItemSnippet) => void;
-  private lastSeenVideoId: string | null = null;
+  private knownVideoIds: Set<string> = new Set();
   private timer: NodeJS.Timeout | null = null;
+  private isRunning: boolean = false;
 
   constructor(options: PollOptions) {
     this.uploadsPlaylistId = getUploadsPlaylistId(options.channelId);
-    this.intervalMs = options.intervalMs ?? 60000; // Default: poll every 60s
+    this.intervalMs = options.intervalMs ?? 60000;
     this.onNewVideo = options.onNewVideo;
   }
 
   public async start(): Promise<void> {
-    // Perform an initial fetch to set the baseline video ID without firing the event
-    this.lastSeenVideoId = await this.fetchLatestVideoId({ triggerEvent: false });
+    if (this.isRunning) return;
+    this.isRunning = true;
 
-    // Start recurring poll loop
-    this.timer = setInterval(async () => {
-      try {
-        await this.checkLatest();
-      } catch (error) {
-        console.error('Error polling YouTube API:', error);
-      }
-    }, this.intervalMs);
+    // Seed initial known videos without triggering callbacks
+    await this.seedInitialState();
+
+    // Schedule recursive loop to avoid overlapping API calls
+    this.scheduleNextPoll();
   }
 
   public stop(): void {
+    this.isRunning = false;
     if (this.timer) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
   }
 
-  private async checkLatest(): Promise<void> {
-    await this.fetchLatestVideoId({ triggerEvent: true });
+  private async seedInitialState(): Promise<void> {
+    try {
+      const recentItems = await this.fetchRecentUploads(5);
+      for (const item of recentItems) {
+        const videoId = item.snippet?.resourceId?.videoId;
+        if (videoId) {
+          this.knownVideoIds.add(videoId);
+        }
+      }
+    } catch (error) {
+      console.error('Error establishing baseline uploads:', error);
+    }
   }
 
-  private async fetchLatestVideoId(config: { triggerEvent: boolean }): Promise<string | null> {
+  private scheduleNextPoll(): void {
+    if (!this.isRunning) return;
+
+    this.timer = setTimeout(async () => {
+      try {
+        await this.poll();
+      } catch (error) {
+        console.error('Error polling YouTube API:', error);
+      } finally {
+        this.scheduleNextPoll();
+      }
+    }, this.intervalMs);
+  }
+
+  private async poll(): Promise<void> {
+    const recentItems = await this.fetchRecentUploads(5);
+
+    // Process from oldest to newest so notifications arrive in chronological order
+    const reversedItems = [...recentItems].reverse();
+
+    for (const item of reversedItems) {
+      const videoId = item.snippet?.resourceId?.videoId;
+      if (!videoId || !item.snippet) continue;
+
+      if (!this.knownVideoIds.has(videoId)) {
+        this.knownVideoIds.add(videoId);
+        this.onNewVideo(item.snippet);
+      }
+    }
+  }
+
+  private async fetchRecentUploads(maxResults: number): Promise<youtube_v3.Schema$PlaylistItem[]> {
     const response = await youtubeClient.playlistItems.list({
       playlistId: this.uploadsPlaylistId,
       part: ['snippet'],
-      maxResults: 1,
+      maxResults,
     });
 
-    const items = response.data.items;
-    if (!items || items.length === 0) return null;
-
-    const latestSnippet = items[0].snippet;
-    const latestVideoId = latestSnippet?.resourceId?.videoId;
-
-    if (!latestVideoId) return null;
-
-    // Check if this video is newer than our baseline
-    if (config.triggerEvent && this.lastSeenVideoId && latestVideoId !== this.lastSeenVideoId) {
-      this.onNewVideo(latestSnippet);
-    }
-
-    this.lastSeenVideoId = latestVideoId;
-    return latestVideoId;
+    return response.data.items ?? [];
   }
 }
 
@@ -86,7 +112,7 @@ async function startPolling() {
   try {
     const response = await youtubeClient.channels.list({
       part: ['id', 'snippet'],
-      forHandle: '@MongoTV' // Try with '@' included
+      forHandle: '@MongoTV',
     });
 
     if (!response.data.items || response.data.items.length === 0) {
@@ -97,17 +123,15 @@ async function startPolling() {
     const channelId = response.data.items[0].id;
 
     if (channelId) {
-        const poller = new YouTubeUploadPoller({
-            channelId: channelId,
-            intervalMs: 120000,
-            onNewVideo: (snippet) => {
-            console.log('🎉 New Video Uploaded!');
-            console.log(`Title: ${snippet.title}`);
-            console.log(`URL: https://www.youtube.com/watch?v=${snippet.resourceId?.videoId}`);
-            },
-        });
+      const poller = new YouTubeUploadPoller({
+        channelId: channelId,
+        intervalMs: 120000,
+        onNewVideo: (snippet) => {
+          handleUpload(snippet)
+        },
+      });
 
-        await poller.start();
+      await poller.start();
     }
   } catch (error) {
     console.error('Error fetching channel details:', error);

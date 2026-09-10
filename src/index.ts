@@ -3,7 +3,7 @@ import { readdir, stat } from "node:fs/promises";
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startPolling } from "./polling";
-//import db from "./util/Database";
+import { db } from "./util/Database";
 
 startPolling()
 
@@ -89,4 +89,4 @@ client.buttons = new Collection();
     client.login(process.env.BOT_TOKEN as string);   
 })();
 
-export { client };
+export { client, db };
