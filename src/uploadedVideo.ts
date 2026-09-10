@@ -5,10 +5,12 @@ async function handleUpload(uploadSnippet: any, guildId: any) {
     const row: any = results.rows[0];
 
     const channel = client.channels.cache.get(row.alertChannelID);
+    console.log(channel);
     if (!channel?.isSendable()) return;
 
     const filterKeywords = row.filterKeywords.split(",");
     for (const keyword of filterKeywords) {
+        console.log(keyword)
         if (uploadSnippet.title.includes(keyword) && row.filterType == 1) return;
     }
 
